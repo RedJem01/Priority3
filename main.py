@@ -20,6 +20,7 @@ SECRET_ACCESS_KEY = os.getenv('SECRET_ACCESS_KEY')
 EMAIL = os.getenv('EMAIL')
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # Make aws clients
 ses = boto3.client(
@@ -37,62 +38,65 @@ def process_message():
     response = sqs.receive_message(QueueUrl=P3_QUEUE, MessageAttributeNames=['All'],
                                    MaxNumberOfMessages=1, WaitTimeSeconds=20)
 
-    logger.info("Message received from queue with ID" + response.get('MessageId'))
+    logger.info("Message received from queue with ID" + json.dumps(response.get('MessageId')))
 
     messages = response.get('Messages')
     if messages is not None:
         message = messages[0]
         body = json.loads(message['Body'])
 
-        if body["title"] and body["description"]:
-            #Try sending email
-            try:
-                logger.info("Sending SES email")
-                response = ses.send_email(
-                    Destination={
-                        'ToAddresses': [
-                            EMAIL,
-                        ],
-                    },
-                    Message={
-                        'Body': {
-                            'Html': {
+        if "title" in body and "description" in body:
+            if body["title"] and body["description"]:
+                #Try sending email
+                try:
+                    logger.info("Sending SES email")
+                    response = ses.send_email(
+                        Destination={
+                            'ToAddresses': [
+                                EMAIL,
+                            ],
+                        },
+                        Message={
+                            'Body': {
+                                'Html': {
+                                    'Charset': "UTF-8",
+                                    'Data': body["description"],
+                                }
+                            },
+                            'Subject': {
                                 'Charset': "UTF-8",
-                                'Data': body["description"],
-                            }
+                                'Data': body["title"],
+                            },
                         },
-                        'Subject': {
-                            'Charset': "UTF-8",
-                            'Data': body["title"],
-                        },
-                    },
-                    Source=EMAIL
-                )
-                logger.info("SES email sent with body:" + json.dumps({
-                        'Body': {
-                            'Html': {
+                        Source=EMAIL
+                    )
+                    logger.info("SES email sent with body:" + json.dumps({
+                            'Body': {
+                                'Html': {
+                                    'Charset': "UTF-8",
+                                    'Data': body["description"],
+                                }
+                            },
+                            'Subject': {
                                 'Charset': "UTF-8",
-                                'Data': body["description"],
-                            }
-                        },
-                        'Subject': {
-                            'Charset': "UTF-8",
-                            'Data': body["title"],
-                        },
-                    }))
+                                'Data': body["title"],
+                            },
+                        }))
 
-            #Catch error
-            except ClientError as e:
-                logger.error(e.response)
+                #Catch error
+                except ClientError as e:
+                    logger.error(e.response)
+            else:
+                logger.error("Either the title or description or both are empty")
         else:
-            logger.info("Either the title or description or both are missing from the SQS message")
+            logger.error("Either the title or description or both are missing from the SQS message")
 
         #Delete message from sqs queue
         sqs.delete_message(
             QueueUrl=P3_QUEUE,
             ReceiptHandle=message['ReceiptHandle']
         )
-        logger.info("Message deleted from queue with ID" + response.get('MessageId'))
+        logger.info("Message deleted from queue with ID" + json.dumps(response.get('MessageId')))
     else:
         logger.info("No messages in queue")
 
