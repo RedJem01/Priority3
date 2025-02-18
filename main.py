@@ -1,11 +1,9 @@
 import json
-import logging
 import os
-import string
+from loguru import logger
 import threading
 
 import boto3
-from botocore.exceptions import ClientError
 from flask import Flask
 from dotenv import load_dotenv
 
@@ -19,9 +17,6 @@ ACCESS_KEY = os.getenv('ACCESS_KEY')
 SECRET_ACCESS_KEY = os.getenv('SECRET_ACCESS_KEY')
 EMAIL = os.getenv('EMAIL')
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
 # Make aws clients
 ses = boto3.client(
     'ses',
@@ -31,24 +26,29 @@ ses = boto3.client(
 )
 
 def process_message():
-    sqs = boto3.client('sqs', region_name=AWS_REGION, aws_access_key_id=ACCESS_KEY,
-                       aws_secret_access_key=SECRET_ACCESS_KEY)
+    try:
+        sqs = boto3.client('sqs', region_name=AWS_REGION, aws_access_key_id=ACCESS_KEY,
+                           aws_secret_access_key=SECRET_ACCESS_KEY)
 
-    #Messagehandling
-    response = sqs.receive_message(QueueUrl=P3_QUEUE, MessageAttributeNames=['All'],
-                                   MaxNumberOfMessages=1, WaitTimeSeconds=20)
+        #Receive message
+        response = sqs.receive_message(QueueUrl=P3_QUEUE, MessageAttributeNames=['All'],
+                                       MaxNumberOfMessages=1, WaitTimeSeconds=20)
 
-    logger.info("Message received from queue with ID" + json.dumps(response.get('MessageId')))
+        messages = response.get('Messages')
 
-    messages = response.get('Messages')
-    if messages is not None:
-        message = messages[0]
-        body = json.loads(message['Body'])
+        #If there are messages in queue
+        if messages is not None:
+            #Get the first message
+            message = messages[0]
+            logger.info(f"Message received from queue with ID: {message["MessageId"]}")
 
-        if "title" in body and "description" in body:
-            if body["title"] and body["description"]:
-                #Try sending email
-                try:
+            #Get the body
+            body = json.loads(message['Body'])
+
+            #Validate body
+            if "title" in body and "description" in body:
+                if body["title"] and body["description"]:
+                    #Try sending email
                     logger.info("Sending SES email")
                     response = ses.send_email(
                         Destination={
@@ -70,7 +70,7 @@ def process_message():
                         },
                         Source=EMAIL
                     )
-                    logger.info("SES email sent with body:" + json.dumps({
+                    logger.info(f"SES email sent with body: {json.dumps({
                             'Body': {
                                 'Html': {
                                     'Charset': "UTF-8",
@@ -81,24 +81,25 @@ def process_message():
                                 'Charset': "UTF-8",
                                 'Data': body["title"],
                             },
-                        }))
+                        })}")
 
-                #Catch error
-                except ClientError as e:
-                    logger.error(e.response)
+                #Display errors for bad message body
+                else:
+                    logger.error("Either the title or description or both are empty")
             else:
-                logger.error("Either the title or description or both are empty")
-        else:
-            logger.error("Either the title or description or both are missing from the SQS message")
+                logger.error("Either the title or description or both are missing from the SQS message")
 
-        #Delete message from sqs queue
-        sqs.delete_message(
-            QueueUrl=P3_QUEUE,
-            ReceiptHandle=message['ReceiptHandle']
-        )
-        logger.info("Message deleted from queue with ID" + json.dumps(response.get('MessageId')))
-    else:
-        logger.info("No messages in queue")
+            #Delete message from sqs queue
+            sqs.delete_message(
+                QueueUrl=P3_QUEUE,
+                ReceiptHandle=message['ReceiptHandle']
+            )
+            logger.info(f"Message deleted from queue with ID: {message["MessageId"]}")
+        #If no messages in queue then display that
+        else:
+            logger.info("No messages in queue")
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
 
 def background_thread():
     thread = threading.Thread(target=process_message, daemon=True)
