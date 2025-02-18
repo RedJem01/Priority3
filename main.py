@@ -100,11 +100,22 @@ def process_message():
     else:
         logger.info("No messages in queue")
 
+def background_thread():
+    thread = threading.Thread(target=process_message, daemon=True)
+    thread.start()
+    return thread
+
+bg_thread = background_thread()
+
 if __name__ == '__main__':
-    threading.Thread(target=process_message, daemon=True).start()
-    app.run()
+    try:
+        app.run(host="0.0.0.0")
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+        stop_flag = True
+        bg_thread.join()
 
 #Helth check for api
-@app.route('/health', methods=['GET'])
+@app.route('/', methods=['GET'])
 def health_check():
     return 'OK', 200
