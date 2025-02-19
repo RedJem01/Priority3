@@ -17,17 +17,10 @@ ACCESS_KEY = os.getenv('ACCESS_KEY')
 SECRET_ACCESS_KEY = os.getenv('SECRET_ACCESS_KEY')
 EMAIL = os.getenv('EMAIL')
 
-# Make aws clients
-ses = boto3.client(
-    'ses',
-    region_name=AWS_REGION,
-    aws_access_key_id=ACCESS_KEY,
-    aws_secret_access_key=SECRET_ACCESS_KEY
-)
-
 stop_flag = False
+testing = False
 
-def process_message():
+def process_message(ses):
     sqs = boto3.client('sqs', region_name=AWS_REGION, aws_access_key_id=ACCESS_KEY,
                        aws_secret_access_key=SECRET_ACCESS_KEY)
 
@@ -105,7 +98,14 @@ def process_message_outer():
     global stop_flag
     while not stop_flag:
         try:
-            process_message()
+            # Make aws clients
+            ses = boto3.client(
+                'ses',
+                region_name=AWS_REGION,
+                aws_access_key_id=ACCESS_KEY,
+                aws_secret_access_key=SECRET_ACCESS_KEY
+            )
+            process_message(ses)
         except Exception as e:
             logger.error(f"An error occurred: {e}")
 

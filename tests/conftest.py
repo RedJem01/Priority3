@@ -7,7 +7,7 @@ from moto import mock_aws
 
 # loading variables from .env file
 load_dotenv()
-REGION=os.getenv('AWS_REGION')
+REGION='eu-west-2'
 @pytest.fixture(scope='function')
 def aws_credentials():
     """Mocked AWS Credentials for moto."""

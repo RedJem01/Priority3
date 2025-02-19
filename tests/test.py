@@ -8,13 +8,12 @@ from moto.ses import ses_backends
 
 import main
 
-def set_environment_variables(queue_url, email, ses):
+def set_environment_variables(queue_url, email):
     main.P3_QUEUE = queue_url
     main.AWS_REGION = 'eu-west-2'
     main.ACCESS_KEY = 'testing'
     main.SECRET_ACCESS_KEY = 'testing'
     main.EMAIL = email
-    main.ses = ses
 
 
 def test_process_message(sqs_client, ses_client):
@@ -24,12 +23,12 @@ def test_process_message(sqs_client, ses_client):
 
     ses_client.verify_email_identity(EmailAddress="test@test.com")
 
-    set_environment_variables(queue_url, 'test@test.com', ses_client)
+    set_environment_variables(queue_url, 'test@test.com')
 
     expected_msg = json.dumps({'description': 'Happening right now', 'title': 'Bug'})
     sqs_messages = sqs_client.send_message(QueueUrl=queue_url, MessageBody=expected_msg)
 
-    main.process_message()
+    main.process_message(ses_client)
 
     send_quota = ses_client.get_send_quota()
     sent_count = int(send_quota["SentLast24Hours"])
@@ -45,12 +44,12 @@ def test_process_message_wrong_data(sqs_client, ses_client):
 
     ses_client.verify_email_identity(EmailAddress="test@test.com")
 
-    set_environment_variables(queue_url, 'test@test.com', ses_client)
+    set_environment_variables(queue_url, 'test@test.com')
 
     expected_msg = json.dumps({'description': 'Happening right now'})
     sqs_messages = sqs_client.send_message(QueueUrl=queue_url, MessageBody=expected_msg)
 
-    main.process_message()
+    main.process_message(ses_client)
 
     send_quota = ses_client.get_send_quota()
     sent_count = int(send_quota["SentLast24Hours"])
